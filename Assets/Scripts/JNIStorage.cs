@@ -59,17 +59,6 @@ public class JNIStorage : MonoBehaviour
     {
         supportedVersions.Clear();
         supportedVersions.AddRange(supportedVersionsArray);
-        AndroidJavaObject[] instances = instancesObj.Call<AndroidJavaObject[]>("toArray");
-        foreach (var instanceObj in instances)
-        {
-            string name = instanceObj.Get<string>("instanceName");
-            string image = instanceObj.Get<string>("instanceImageURL");
-            
-            if (!supportedVersions.Contains(name))
-            {
-                supportedVersions.Add(name);
-            }
-        }
     }
 
     public static PojlibInstance GetInstance(string name)

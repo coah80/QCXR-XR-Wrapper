@@ -34,10 +34,7 @@ public class InstanceManager : MonoBehaviour
     {
         List<string> modLoaders = new List<string>
         {
-            "Fabric",
-            "Forge",
-            "Quilt",
-            "NeoForge"
+            "Fabric"
         };
         
         loaderDropdown.AddOptions(modLoaders);

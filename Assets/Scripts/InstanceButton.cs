@@ -24,13 +24,12 @@ public class InstanceButton : MonoBehaviour
 
         if (JNIStorage.apiClass.GetStatic<bool>("gameReady") && !gameReady) {
             gameReady = true;
-            async Task FinishAnim()
+            LeanTween.value(ScreenFade.gameObject,0, 1, 1).setOnUpdate(alpha => ScreenFade.alpha = alpha).setOnComplete(() =>
             {
-                await Task.Delay(200);
+                XRGeneralSettings.Instance.Manager.StopSubsystems();
                 XRGeneralSettings.Instance.Manager.DeinitializeLoader();
-            }
-
-            LeanTween.value(ScreenFade.gameObject,0, 1, 1).setOnUpdate(alpha => ScreenFade.alpha = alpha).setOnComplete(() => FinishAnim());
+                JNIStorage.apiClass.SetStatic("launcherXRStopped", true);
+            });
         }
     }
 
@@ -52,14 +51,16 @@ public class InstanceButton : MonoBehaviour
     {
         if (JNIStorage.GetInstance(currInstName) == null)
         {
-            Debug.Log("Instance is null!");
-            
             CreateDefaultInstance(currInstName);
+        }
+
+        PojlibInstance instance = JNIStorage.GetInstance(currInstName);
+        if (instance == null)
+        {
+            JNIStorage.instance.uiHandler.SetAndShowError("Instance creation failed!");
             return;
         }
-        
-        
-        PojlibInstance instance = JNIStorage.GetInstance(currInstName);
+
         uiHandler.PlaySetter();
         ProgressBarManager.started = true;
         new Thread(() =>
@@ -86,12 +87,14 @@ public class InstanceButton : MonoBehaviour
     public async void MirrorNativesForInstance()
     {
         PojlibInstance instance = JNIStorage.GetInstance(currInstName);
-        JNIStorage.apiClass.CallStatic("mirrorNativesInFolder", JNIStorage.activity, JNIStorage.instancesObj, instance.raw, "/sdcard/Android/data/com.qcxr.qcxr/files/natives");
+        string packageName = JNIStorage.activity.Call<string>("getPackageName");
+        JNIStorage.apiClass.CallStatic("mirrorNativesInFolder", JNIStorage.activity, JNIStorage.instancesObj, instance.raw, "/sdcard/Android/data/" + packageName + "/files/natives");
     }
 
     public async void ImportSaves()
     {
         PojlibInstance instance = JNIStorage.GetInstance(currInstName);
-        JNIStorage.apiClass.CallStatic("unzipSavesFromFolder", instance.raw, "/sdcard/Android/data/com.qcxr.qcxr/files/import-saves");
+        string packageName = JNIStorage.activity.Call<string>("getPackageName");
+        JNIStorage.apiClass.CallStatic("unzipSavesFromFolder", instance.raw, "/sdcard/Android/data/" + packageName + "/files/import-saves");
     }
 }
