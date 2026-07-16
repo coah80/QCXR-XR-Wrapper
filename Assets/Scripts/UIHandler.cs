@@ -336,7 +336,15 @@ public class UIHandler : MonoBehaviour
 
     public void UpdateLegalButton()
     {
-        if (legalContent.transform.localPosition.y > 6800f)
+        ScrollRect scroll = legalContent.GetComponentInParent<ScrollRect>();
+        if (scroll == null || scroll.content == null || scroll.viewport == null)
+        {
+            legalContinue.interactable = true;
+            return;
+        }
+
+        bool scrollable = scroll.content.rect.height > scroll.viewport.rect.height + 1f;
+        if (!scrollable || scroll.verticalNormalizedPosition <= 0.02f)
         {
             legalContinue.interactable = true;
         }
