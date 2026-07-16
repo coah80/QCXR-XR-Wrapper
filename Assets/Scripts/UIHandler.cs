@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
@@ -8,6 +10,8 @@ using UnityEngine.UI;
 
 public class UIHandler : MonoBehaviour
 {
+    private readonly ConcurrentQueue<string> pendingErrors = new ConcurrentQueue<string>();
+    private int mainThreadId;
     public TextMeshProUGUI minuteHourText;
     public TMP_Dropdown dropdownMain;
     public TMP_Dropdown dropdownModSearch;
@@ -31,6 +35,11 @@ public class UIHandler : MonoBehaviour
     static string profileName;
     public ModManager modManager;
     public LoginHandler loginHandler;
+
+    void Awake()
+    {
+        mainThreadId = Thread.CurrentThread.ManagedThreadId;
+    }
 
     void Start()
     {
@@ -64,10 +73,173 @@ public class UIHandler : MonoBehaviour
         modsButton.interactable = false;
         instancesButton.interactable = false;
         playButton.interactable = false;
+
+        CloneHelpButton("SendLogsButton", "Send Logs",
+            new Vector2(0f, -(((RectTransform)needHelpButton.transform).rect.height + 10f)),
+            () => StartCoroutine(LogUploader.SendLogs(this)));
+
+        StartCoroutine(UpdateChecker.CheckForUpdate(ShowUpdateButton));
+
+        CheckForPreviousCrash();
+    }
+
+    private Button updateButton;
+
+    public void ShowUpdateButton(string releaseUrl)
+    {
+        if (updateButton != null) return;
+        updateButton = CloneHelpButton("UpdateButton", "Update!",
+            new Vector2(-(((RectTransform)needHelpButton.transform).rect.width + 10f), 0f),
+            () => Application.OpenURL(releaseUrl));
+        FlashRed(updateButton);
+    }
+
+    private void CheckForPreviousCrash()
+    {
+        long newest = LogUploader.NewestCrashTimestamp();
+
+        if (!PlayerPrefs.HasKey("lastCrashAck"))
+        {
+            PlayerPrefs.SetString("lastCrashAck", newest.ToString());
+            PlayerPrefs.Save();
+            return;
+        }
+
+        if (newest == 0) return;
+
+        long acknowledged = 0;
+        long.TryParse(PlayerPrefs.GetString("lastCrashAck", "0"), out acknowledged);
+        if (newest <= acknowledged) return;
+
+        ShowCrashMenu(newest);
+    }
+
+    private void ShowCrashMenu(long crashTimestamp)
+    {
+        GameObject crashMenu = Instantiate(errorMenu, errorMenu.transform.parent);
+        crashMenu.name = "CrashMenu";
+
+        Button rootButton = crashMenu.GetComponent<Button>();
+        Button okButton = null;
+        foreach (Button candidate in crashMenu.GetComponentsInChildren<Button>(true))
+        {
+            if (candidate.transform != crashMenu.transform)
+            {
+                okButton = candidate;
+                break;
+            }
+        }
+        if (okButton == null)
+        {
+            Destroy(crashMenu);
+            SetAndShowError("Oops! game crashed. Use Send Logs to report it.");
+            return;
+        }
+
+        foreach (TextMeshProUGUI text in crashMenu.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            if (!text.transform.IsChildOf(okButton.transform))
+            {
+                text.text = "Oops! game crashed.";
+                break;
+            }
+        }
+
+        void Acknowledge()
+        {
+            PlayerPrefs.SetString("lastCrashAck", crashTimestamp.ToString());
+            PlayerPrefs.Save();
+            Destroy(crashMenu);
+        }
+
+        SetupDialogButton(okButton, "okay.", Acknowledge);
+        if (rootButton != null)
+        {
+            SetupDialogButton(rootButton, null, Acknowledge);
+        }
+
+        Button sendButton = Instantiate(okButton.gameObject, okButton.transform.parent).GetComponent<Button>();
+        sendButton.gameObject.name = "SendLogsCrashButton";
+        RectTransform okRt = (RectTransform)okButton.transform;
+        RectTransform sendRt = (RectTransform)sendButton.transform;
+        float shift = okRt.rect.width * 0.5f + 8f;
+        Vector2 basePos = okRt.anchoredPosition;
+        okRt.anchoredPosition = basePos + new Vector2(-shift, 0f);
+        sendRt.anchoredPosition = basePos + new Vector2(shift, 0f);
+        SetupDialogButton(sendButton, "send logs", () =>
+        {
+            Acknowledge();
+            StartCoroutine(LogUploader.SendLogs(this, "Oops! game crashed."));
+        });
+
+        crashMenu.SetActive(true);
+    }
+
+    private void SetupDialogButton(Button button, string text, Action onClick)
+    {
+        if (text != null)
+        {
+            TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (label != null) label.text = text;
+        }
+        for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+        {
+            button.onClick.SetPersistentListenerState(i, UnityEngine.Events.UnityEventCallState.Off);
+        }
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => onClick());
+    }
+
+    private Button CloneHelpButton(string name, string text, Vector2 offset, Action onClick)
+    {
+        return CloneButton(needHelpButton, name, text, offset, onClick);
+    }
+
+    public static Button CloneButton(Button template, string name, string text, Vector2 offset, Action onClick)
+    {
+        GameObject clone = Instantiate(template.gameObject, template.transform.parent);
+        clone.name = name;
+
+        RectTransform src = (RectTransform)template.transform;
+        RectTransform rt = (RectTransform)clone.transform;
+        rt.anchorMin = src.anchorMin;
+        rt.anchorMax = src.anchorMax;
+        rt.pivot = src.pivot;
+        rt.anchoredPosition = src.anchoredPosition + offset;
+
+        TextMeshProUGUI label = clone.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (label != null) label.text = text;
+
+        Button button = clone.GetComponent<Button>();
+        for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+        {
+            button.onClick.SetPersistentListenerState(i, UnityEngine.Events.UnityEventCallState.Off);
+        }
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => onClick());
+        button.interactable = true;
+        return button;
+    }
+
+    private void FlashRed(Button button)
+    {
+        Image image = button.GetComponent<Image>();
+        if (image == null) image = button.GetComponentInChildren<Image>();
+        if (image == null) return;
+
+        Color baseColor = image.color;
+        Color red = new Color(0.85f, 0.1f, 0.1f, baseColor.a);
+        LeanTween.value(button.gameObject, 0f, 1f, 0.6f)
+            .setLoopPingPong()
+            .setOnUpdate((float t) => image.color = Color.Lerp(baseColor, red, t));
     }
     
     void Update()
     {
+        while (pendingErrors.TryDequeue(out string errorMessage))
+        {
+            ShowError(errorMessage);
+        }
         string time = DateTime.Now.ToString("hh:mm tt");
         minuteHourText.text = time;
         UILoginCheck();
@@ -147,6 +319,16 @@ public class UIHandler : MonoBehaviour
     }
 
     public void SetAndShowError(String errorMessage)
+    {
+        if (Thread.CurrentThread.ManagedThreadId != mainThreadId)
+        {
+            pendingErrors.Enqueue(errorMessage);
+            return;
+        }
+        ShowError(errorMessage);
+    }
+
+    private void ShowError(string errorMessage)
     {
         errorMenu.GetComponentInChildren<TextMeshProUGUI>().text = errorMessage;
         errorMenu.SetActive(true);

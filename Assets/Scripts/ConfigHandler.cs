@@ -39,7 +39,7 @@ public class ConfigHandler : MonoBehaviour
                 acceptedLegal = false,
                 setDevMods = false,
                 setCustomRAM = false,
-                customRAMValue = "2048",
+                customRAMValue = "2560",
                 lastSelectedInstance = 0,
                 lastSelectedAccount = 0,
                 accounts = new List<Accounts>()

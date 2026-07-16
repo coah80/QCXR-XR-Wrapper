@@ -24,6 +24,14 @@ public class DevHandler : MonoBehaviour
     {
         InitializeButtonListeners();
         configPath = Application.persistentDataPath + "/launcher.conf";
+
+        if (fixFilePerms != null)
+        {
+            UIHandler.CloneButton(fixFilePerms, "ShowUpdateBtnButton", "Show Update Btn",
+                new Vector2(0f, -(((RectTransform)fixFilePerms.transform).rect.height + 10f)),
+                () => JNIStorage.instance.uiHandler.ShowUpdateButton(
+                    "https://github.com/coah80/questcraft-visor-releases/releases/latest"));
+        }
     }
     
     private void OnDestroy()

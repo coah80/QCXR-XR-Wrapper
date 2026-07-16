@@ -16,19 +16,27 @@ public class InstanceButton : MonoBehaviour
     public CanvasGroup ScreenFade;
     bool gameReady = false;
 
+    private void Awake()
+    {
+        if (Application.platform == RuntimePlatform.Android)
+            Application.targetFrameRate = 120;
+    }
+
     public void Update()
     {
-        if (Application.platform != RuntimePlatform.Android)
+        if (Application.platform != RuntimePlatform.Android || gameReady)
             return;
         currInstName = JNIStorage.instance.instancesDropdown.options[JNIStorage.instance.instancesDropdown.value].text;
 
-        if (JNIStorage.apiClass.GetStatic<bool>("gameReady") && !gameReady) {
+        if (JNIStorage.apiClass.GetStatic<bool>("gameReady")) {
             gameReady = true;
             LeanTween.value(ScreenFade.gameObject,0, 1, 1).setOnUpdate(alpha => ScreenFade.alpha = alpha).setOnComplete(() =>
             {
                 XRGeneralSettings.Instance.Manager.StopSubsystems();
                 XRGeneralSettings.Instance.Manager.DeinitializeLoader();
                 JNIStorage.apiClass.SetStatic("launcherXRStopped", true);
+                Application.targetFrameRate = 5;
+                enabled = false;
             });
         }
     }
